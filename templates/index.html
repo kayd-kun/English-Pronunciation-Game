@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Study English</title>
+  </head>
+  <body>
+    <style>
+      .center {
+        padding: 20px;
+        border: 5px solid #362ff4;
+        text-align: center;
+      }
+
+      .sideBar {
+        padding: 50px;
+        position: absolute;
+        z-index: 1;
+      }
+
+    </style>
+
+    <main>
+
+        <div class="sideBar">
+            <h3>
+                Words To Test:
+            </h3>
+            <ul>
+                {% for word in predefined_words %}
+                    <li>{{word}}</li>
+                {% endfor %}
+            </ul>
+        </div>
+
+        <div class="center">
+            <h1>Test English Pronunciation</h1>
+            <div>
+              <b id="wordTest"></b>
+            </div>
+      
+            <div>
+              <p>
+                <button id="previous" onclick="prev_btn_handler()">Previous</button>
+                <button id="startRecording">Start recording</button>
+                <button id="stopRecording" disabled>Stop recording</button>
+                <button id="next" onclick="next_btn_handler()">Next</button>
+              </p>
+            </div>
+      
+            <div>
+              <p>
+                <button id="checkAudio" disabled>Check</button>
+              </p>
+              
+              <div id="users_text">
+                  You Said:
+              </div>
+      
+              <div>
+                  Correct: <span id="correct_incorrect"></span>
+                  <br />
+      
+              </div>
+            </div>
+      
+            <div>
+              Score: <span id="scoreField">0</span>
+              <br />
+            </div>
+      
+            <div>
+              <button id="sayCorrectAudio">Correct Audio</button>
+            </div>
+        </div>
+    </main>
+
+    <script>
+
+        var data = JSON.parse('{{predefined_words | tojson}}')
+        let dataCounter = 0
+        wordTest.innerText = data[0]
+        let score = 0
+
+      navigator.mediaDevices.getUserMedia({ audio: true }).then((stream) => {
+        handlerFunction(stream);
+      });
+
+      function handlerFunction(stream) {
+        rec = new MediaRecorder(stream);
+        rec.ondataavailable = (e) => {
+          audioChunks.push(e.data);
+          if (rec.state == "inactive") {
+            let blob = new Blob(audioChunks, { type: "audio/mpeg-3" });
+            sendData(blob);
+          }
+        };
+      }
+
+      function sendData(data) {
+        var form = new FormData();
+        form.append("file", data, "data.mp3");
+        form.append("title", "data.mp3");
+        //Chrome inspector shows that the post data includes a file and a title.
+        fetch("/save-record", {
+          method: "POST",
+          body: form,
+        }).then(function (response) {
+          console.log(response);
+        });
+      }
+
+      startRecording.onclick = (e) => {
+        console.log("Recording are started..");
+        startRecording.disabled = true;
+        stopRecording.disabled = false;
+        audioChunks = [];
+        rec.start();
+      };
+
+      stopRecording.onclick = (e) => {
+        console.log("Recording are stopped.");
+        startRecording.disabled = false;
+        stopRecording.disabled = true;
+        checkAudio.disabled = false
+        rec.stop();
+      };
+
+      let result;
+      checkAudio.onclick = (e) => {
+        console.log("Checking");
+        // data = checkAudio();
+        // console.log(data)
+        fetch("/check-audio", {
+          method: "POST",
+        }).then(function (response) {
+            return response.json();
+        }).then(function(data) {
+            result = JSON.stringify(data)
+            result = JSON.parse(result)
+            updateResult(result)
+            return result
+        }).then(function (result) {
+            user_text_from_audio = result.result
+            check_with_test(user_text_from_audio)
+        });
+    };
+
+    sayCorrectAudio.onclick = (e) => {
+        // previous.disabled = true;
+        // next.disabled = true;
+        console.log('Saying the audio')
+        word_to_speak = data[dataCounter]
+        fetchUrl = `/speak-audio/${word_to_speak}`
+        fetch(fetchUrl, {
+          method: "GET",
+        }).then(function (response) {
+            return response.json();
+        });
+
+    }
+
+    function updateResult(result) {
+        user_text_from_audio = result.result
+        output = 'You Said: '
+        output += user_text_from_audio
+        users_text.innerText = output
+    }
+
+    function check_with_test(api_result) {
+        word_to_check = data[dataCounter]
+        console.log('Checking')
+        if (word_to_check.toLowerCase() == api_result.toLowerCase()) {
+            console.log('Pronounced Correctly')
+            correct_incorrect.innerText = 'Yes'
+            updateScore(true)
+        } else {
+            console.log('Pronounced Incorrectly')
+            correct_incorrect.innerText = 'No'
+            updateScore(false)
+
+        }
+        console.log(word_to_check)
+        console.log(api_result)
+    }
+
+   function next_btn_handler() {
+        users_text.innerText = 'You Said: '
+        correct_incorrect.innerText = ''
+        dataCounter = (dataCounter + 1) % data.length
+        wordTest.innerText = data[dataCounter]
+    }
+
+    function prev_btn_handler() {
+        users_text.innerText = 'You Said: '
+        correct_incorrect.innerText = ''
+
+        dataCounter = (dataCounter - 1)
+        if (dataCounter < 0) {
+            dataCounter = data.length - 1
+        }
+        wordTest.innerText = data[dataCounter]
+    }
+
+    function updateScore(true_false) {
+        if (true_false == true) {
+            score += 1
+            scoreField.innerText = score
+
+        } else {
+            score -= 1
+            scoreField.innerText = score
+        }
+    }
+
+    </script>
+  </body>
+</html>
